@@ -7,6 +7,7 @@
 
 import Foundation
 import Combine
+import UIKit
 
 // MARK: - Helper Extensions
 
@@ -183,6 +184,12 @@ class SignalRService: SignalRServiceProtocol, ObservableObject {
     private var urlSession: URLSession
     private var webSocketTask: URLSessionWebSocketTask?
     
+    // Background/Foreground handling and connection management
+    private var cancellables = Set<AnyCancellable>()
+    private var backgroundTaskID: UIBackgroundTaskIdentifier = .invalid
+    private var heartbeatTimer: Timer?
+    private var shouldReconnectOnForeground = false
+    
     // SignalR invocation tracking
     private var pendingInvocations: [String: (Result<Any?, Error>) -> Void] = [:]
     private var invocationCounter: Int = 0
@@ -198,6 +205,109 @@ class SignalRService: SignalRServiceProtocol, ObservableObject {
         
         // Use custom delegate for SSL certificate handling
         self.urlSession = URLSession(configuration: config, delegate: SignalRSSLDelegate(), delegateQueue: nil)
+        
+        // Set up app lifecycle observers
+        setupAppLifecycleObservers()
+    }
+    
+    private func setupAppLifecycleObservers() {
+        // Monitor app going to background
+        NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)
+            .sink { [weak self] _ in
+                print("📱 App entering background - managing SignalR connection")
+                self?.handleAppDidEnterBackground()
+            }
+            .store(in: &cancellables)
+        
+        // Monitor app coming to foreground
+        NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)
+            .sink { [weak self] _ in
+                print("📱 App entering foreground - checking SignalR connection")
+                self?.handleAppWillEnterForeground()
+            }
+            .store(in: &cancellables)
+        
+        // Monitor app becoming active
+        NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)
+            .sink { [weak self] _ in
+                print("📱 App became active - ensuring SignalR connection")
+                self?.handleAppDidBecomeActive()
+            }
+            .store(in: &cancellables)
+    }
+    
+    private func handleAppDidEnterBackground() {
+        // Start background task to keep connection alive briefly
+        backgroundTaskID = UIApplication.shared.beginBackgroundTask(withName: "SignalR Background") {
+            // Clean up when background time expires
+            self.endBackgroundTask()
+        }
+        
+        // Mark that we should reconnect when app comes back
+        if connectionState == .connected {
+            shouldReconnectOnForeground = true
+        }
+        
+        // Stop heartbeat to save battery
+        stopHeartbeat()
+    }
+    
+    private func handleAppWillEnterForeground() {
+        // End background task
+        endBackgroundTask()
+        
+        // Check if we need to reconnect
+        if shouldReconnectOnForeground || connectionState == .disconnected {
+            Task {
+                do {
+                    try await connect()
+                    shouldReconnectOnForeground = false
+                } catch {
+                    print("❌ Failed to reconnect on foreground: \(error)")
+                }
+            }
+        }
+    }
+    
+    private func handleAppDidBecomeActive() {
+        // Restart heartbeat if connected
+        if connectionState == .connected {
+            startHeartbeat()
+        }
+    }
+    
+    private func endBackgroundTask() {
+        if backgroundTaskID != .invalid {
+            UIApplication.shared.endBackgroundTask(backgroundTaskID)
+            backgroundTaskID = .invalid
+        }
+    }
+    
+    private func startHeartbeat() {
+        stopHeartbeat()
+        heartbeatTimer = Timer.scheduledTimer(withTimeInterval: 30.0, repeats: true) { [weak self] _ in
+            Task { [weak self] in
+                await self?.sendHeartbeat()
+            }
+        }
+    }
+    
+    private func stopHeartbeat() {
+        heartbeatTimer?.invalidate()
+        heartbeatTimer = nil
+    }
+    
+    private func sendHeartbeat() async {
+        guard connectionState == .connected else { return }
+        
+        do {
+            // Send a simple ping to keep connection alive
+            let _: String? = try await invoke("Ping", parameters: [])
+            print("💓 SignalR heartbeat sent")
+        } catch {
+            print("❌ Heartbeat failed: \(error)")
+            // Don't trigger full reconnection on heartbeat failure
+        }
     }
     
     // MARK: - Connection Management
@@ -235,6 +345,9 @@ class SignalRService: SignalRServiceProtocol, ObservableObject {
                 self.connectionState = .connected
             }
             print("✅ SignalR connected successfully")
+            
+            // Start heartbeat to keep connection alive
+            startHeartbeat()
             
         } catch let error as SignalRError {
             if case .connectionFailed(let message) = error, message.contains("hostname could not be found") {
@@ -383,6 +496,9 @@ class SignalRService: SignalRServiceProtocol, ObservableObject {
                     self.connectionState = .connected
                 }
                 print("✅ SignalR connected successfully via IP with host headers")
+                
+                // Start heartbeat to keep connection alive
+                startHeartbeat()
                 return
                 
             } catch SignalRError.connectionFailed(let message) where message.contains("404") {
@@ -788,13 +904,21 @@ class SignalRService: SignalRServiceProtocol, ObservableObject {
     
     func disconnect() {
         Task {
+            // Stop heartbeat
+            stopHeartbeat()
+            
+            // Cancel WebSocket
             webSocketTask?.cancel()
             webSocketTask = nil
+            
+            // End background task if active
+            endBackgroundTask()
             
             await MainActor.run {
                 self.connectionState = .disconnected
             }
             eventHandlers.removeAll()
+            shouldReconnectOnForeground = false
             print("🔗 SignalR Service disconnected")
         }
     }

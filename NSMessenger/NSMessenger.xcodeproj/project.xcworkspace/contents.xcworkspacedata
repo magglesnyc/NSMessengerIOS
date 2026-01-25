@@ -46,4 +46,7 @@
    <FileRef
       location = "group:ExportComplianceAddition.plist">
    </FileRef>
+   <FileRef
+      location = "group:RealTimeConnectionFixes.md">
+   </FileRef>
 </Workspace>

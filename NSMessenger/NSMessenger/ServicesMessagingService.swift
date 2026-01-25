@@ -56,14 +56,29 @@ class MessagingService: ObservableObject {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            print("🔄 SignalR reconnected - re-registering event handlers")
-            self?.setupSignalRHandlers()
+            print("🔄 SignalR reconnected - re-registering event handlers and reloading data")
+            self?.handleReconnection()
+        }
+    }
+    
+    private func handleReconnection() {
+        // Re-register all event handlers
+        setupSignalRHandlers()
+        
+        Task {
+            // Reload all essential data
+            await loadChats()
             
             // Reload current conversation messages if we have one selected
-            if let conversationId = self?.currentConversationId {
-                Task {
-                    await self?.loadMessages(for: conversationId)
-                }
+            if let conversationId = currentConversationId {
+                print("🔄 Reloading messages for current conversation: \(conversationId)")
+                await loadMessages(for: conversationId)
+            }
+            
+            // Reload contacts if they were loaded before
+            if !contacts.isEmpty {
+                print("🔄 Reloading contacts after reconnection")
+                await loadContacts()
             }
         }
     }
@@ -400,6 +415,19 @@ class MessagingService: ObservableObject {
         await MainActor.run {
             self.currentMessages = []
             self.objectWillChange.send()
+        }
+        
+        // Check SignalR connection and reconnect if needed
+        if signalRService.connectionState != .connected {
+            print("🔄 SignalR not connected, attempting to reconnect...")
+            do {
+                try await signalRService.connect()
+                // Re-register handlers after reconnection
+                setupSignalRHandlers()
+            } catch {
+                print("❌ Failed to reconnect SignalR: \(error)")
+                // Continue anyway - might work with cached data
+            }
         }
         
         // Join new conversation
