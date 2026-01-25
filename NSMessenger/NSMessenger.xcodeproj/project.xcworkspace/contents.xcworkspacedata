@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Workspace
+   version = "1.0">
+   <FileRef
+      location = "self:">
+   </FileRef>
+   <FileRef
+      location = "group:ModelsAuthModels.swift">
+   </FileRef>
+   <FileRef
+      location = "group:ModelsChatModels.swift">
+   </FileRef>
+   <FileRef
+      location = "group:DesignSystemColors.swift">
+   </FileRef>
+   <FileRef
+      location = "group:DesignSystemSpacing.swift">
+   </FileRef>
+   <FileRef
+      location = "group:ServicesConfigurationManager.swift">
+   </FileRef>
+   <FileRef
+      location = "group:Package.swift">
+   </FileRef>
+   <FileRef
+      location = "group:DesignSystemComponentStyles.swift">
+   </FileRef>
+   <FileRef
+      location = "group:ComponentsAvatarView.swift">
+   </FileRef>
+   <FileRef
+      location = "group:ComponentsSearchBar.swift">
+   </FileRef>
+   <FileRef
+      location = "group:ComponentsChatDetailHeader.swift">
+   </FileRef>
+   <FileRef
+      location = "group:UtilitiesDateFormatter+Extensions.swift">
+   </FileRef>
+   <FileRef
+      location = "group:Info.plist">
+   </FileRef>
+   <FileRef
+      location = "group:GIT_SETUP_GUIDE.md">
+   </FileRef>
+</Workspace>
