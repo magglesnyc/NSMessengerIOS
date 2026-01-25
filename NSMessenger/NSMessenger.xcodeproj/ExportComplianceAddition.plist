@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Add these keys to your existing Info.plist to automatically handle export compliance -->
+    
+    <!-- Indicates app uses encryption -->
+    <key>ITSAppUsesNonExemptEncryption</key>
+    <false/>
+    
+    <!-- Alternative approach: Declare what type of encryption you use -->
+    <!-- Use this instead if you want to be more specific -->
+    <!--
+    <key>ITSAppUsesNonExemptEncryption</key>
+    <true/>
+    <key>ITSEncryptionExportComplianceCode</key>
+    <string>a</string>
+    -->
+    
+</dict>
+</plist>
+
+<!-- 
+INSTRUCTIONS:
+1. Open your NSMessenger/Info.plist file in Xcode
+2. Add the ITSAppUsesNonExemptEncryption key with value false
+3. This tells Apple your app only uses standard encryption (HTTPS, etc.)
+4. Future builds will automatically skip the compliance questions
+
+For NSMessenger, setting this to 'false' is appropriate because you only use:
+- HTTPS for API calls
+- Standard JWT token handling  
+- iOS standard encryption features
+- No custom or proprietary encryption algorithms
+-->

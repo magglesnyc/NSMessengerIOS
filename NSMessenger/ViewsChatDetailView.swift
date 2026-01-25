@@ -86,6 +86,25 @@ struct ChatDetailView: View {
                         // Pull to refresh - reload messages
                         await viewModel.refreshMessages()
                     }
+                    .overlay(alignment: .bottomTrailing) {
+                        // Manual scroll to bottom button (shows when needed)
+                        if !viewModel.messageGroups.isEmpty {
+                            Button(action: {
+                                if let proxy = scrollViewProxy {
+                                    scrollToBottomSmoothly(proxy: proxy)
+                                }
+                            }) {
+                                Image(systemName: "arrow.down.circle.fill")
+                                    .font(.title2)
+                                    .foregroundColor(.accent)
+                                    .background(Color.white)
+                                    .clipShape(Circle())
+                                    .shadow(radius: 4)
+                            }
+                            .padding(.trailing, Spacing.lg)
+                            .padding(.bottom, 80) // Above the input area
+                        }
+                    }
                     .onChange(of: viewModel.selectedChatId) { _ in
                         // Reset scroll state when chat changes
                         hasInitiallyScrolled = false
@@ -93,7 +112,7 @@ struct ChatDetailView: View {
                     .onChange(of: keyboardManager.isKeyboardVisible) { isVisible in
                         // When keyboard shows, scroll to bottom to keep last message visible
                         if isVisible && hasInitiallyScrolled && !viewModel.messageGroups.isEmpty {
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                                 scrollToBottomSmoothly(proxy: proxy)
                             }
                         }
@@ -105,7 +124,9 @@ struct ChatDetailView: View {
                     .onReceive(viewModel.$messageGroups) { groups in
                         // Scroll to bottom whenever messages change
                         if !groups.isEmpty {
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                            // Use longer delay for initial scroll to ensure messages are rendered
+                            let delay = hasInitiallyScrolled ? 0.2 : 0.5
+                            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
                                 if hasInitiallyScrolled {
                                     scrollToBottomSmoothly(proxy: proxy)
                                 } else {
@@ -118,7 +139,7 @@ struct ChatDetailView: View {
                     .onReceive(viewModel.$shouldScrollToBottom) { shouldScroll in
                         // React to scroll commands from the view model
                         if shouldScroll && !viewModel.messageGroups.isEmpty {
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                                 scrollToBottomSmoothly(proxy: proxy)
                             }
                         }
@@ -178,15 +199,25 @@ struct ChatDetailView: View {
         
         print("📜 Scrolling to bottom instantly for chat: \(selectedChatName)")
         
-        // Try multiple scroll targets for better reliability
+        // Multiple attempts with different scroll targets for maximum reliability
         if let lastGroup = viewModel.messageGroups.last,
            let lastMessage = lastGroup.messages.last {
-            DispatchQueue.main.async {
+            
+            // Immediate scroll to last message
+            proxy.scrollTo(lastMessage.id, anchor: .bottom)
+            
+            // Backup scroll attempts with delays
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                 proxy.scrollTo(lastMessage.id, anchor: .bottom)
-                // Also try scrolling to the bottom marker as a fallback
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                    proxy.scrollTo("bottom", anchor: .bottom)
-                }
+            }
+            
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                proxy.scrollTo("bottom", anchor: .bottom)
+            }
+            
+            // Final attempt after UI settles
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                proxy.scrollTo(lastMessage.id, anchor: .bottom)
             }
         } else {
             proxy.scrollTo("bottom", anchor: .bottom)

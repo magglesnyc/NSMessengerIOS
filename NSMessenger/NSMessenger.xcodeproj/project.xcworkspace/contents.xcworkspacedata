@@ -43,4 +43,7 @@
    <FileRef
       location = "group:GIT_SETUP_GUIDE.md">
    </FileRef>
+   <FileRef
+      location = "group:ExportComplianceAddition.plist">
+   </FileRef>
 </Workspace>

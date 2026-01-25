@@ -21,12 +21,12 @@ class ChatViewModel: ObservableObject {
     /// Published property to trigger scroll to bottom from outside
     @Published var shouldScrollToBottom = false
     
-    /// Method to trigger scroll to bottom
+    /// Method to trigger scroll to bottom with better reliability
     func scrollToBottom() {
         print("📜 ChatViewModel: Triggering scroll to bottom")
         shouldScrollToBottom = true
-        // Reset after a shorter delay to be more responsive
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+        // Reset after a longer delay to ensure scroll completes
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             self.shouldScrollToBottom = false
         }
     }
@@ -184,14 +184,14 @@ class ChatViewModel: ObservableObject {
         Task {
             await messagingService.debugConversationSelection(chatId)
             
-            // Wait a bit longer for messages to load properly
-            try? await Task.sleep(nanoseconds: 300_000_000) // 0.3 second
+            // Wait longer for messages to load properly on device
+            try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 second
             
             // Trigger UI update and scroll to bottom
             await MainActor.run {
                 objectWillChange.send()
-                // Trigger scroll to bottom when switching chats
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                // Trigger scroll to bottom when switching chats with delay
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                     self.scrollToBottom()
                 }
             }
