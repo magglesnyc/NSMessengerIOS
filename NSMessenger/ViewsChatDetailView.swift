@@ -86,28 +86,18 @@ struct ChatDetailView: View {
                         // Pull to refresh - reload messages
                         await viewModel.refreshMessages()
                     }
-                    .overlay(alignment: .bottomTrailing) {
-                        // Manual scroll to bottom button (shows when needed)
-                        if !viewModel.messageGroups.isEmpty {
-                            Button(action: {
-                                if let proxy = scrollViewProxy {
-                                    scrollToBottomSmoothly(proxy: proxy)
-                                }
-                            }) {
-                                Image(systemName: "arrow.down.circle.fill")
-                                    .font(.title2)
-                                    .foregroundColor(.accent)
-                                    .background(Color.white)
-                                    .clipShape(Circle())
-                                    .shadow(radius: 4)
-                            }
-                            .padding(.trailing, Spacing.lg)
-                            .padding(.bottom, 80) // Above the input area
-                        }
-                    }
+
                     .onChange(of: viewModel.selectedChatId) { _ in
                         // Reset scroll state when chat changes
                         hasInitiallyScrolled = false
+                        
+                        // Immediately position at bottom when switching chats
+                        if !viewModel.messageGroups.isEmpty {
+                            DispatchQueue.main.async {
+                                scrollToBottomInstantly(proxy: proxy)
+                                hasInitiallyScrolled = true
+                            }
+                        }
                     }
                     .onChange(of: keyboardManager.isKeyboardVisible) { isVisible in
                         // When keyboard shows, scroll to bottom to keep last message visible
@@ -122,24 +112,27 @@ struct ChatDetailView: View {
                         scrollViewProxy = proxy
                     }
                     .onReceive(viewModel.$messageGroups) { groups in
-                        // Scroll to bottom whenever messages change
-                        if !groups.isEmpty {
-                            // Use longer delay for initial scroll to ensure messages are rendered
-                            let delay = hasInitiallyScrolled ? 0.2 : 0.5
-                            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-                                if hasInitiallyScrolled {
-                                    scrollToBottomSmoothly(proxy: proxy)
-                                } else {
-                                    scrollToBottomInstantly(proxy: proxy)
-                                    hasInitiallyScrolled = true
-                                }
+                        print("📜 onReceive messageGroups: \(groups.count) groups, hasInitiallyScrolled: \(hasInitiallyScrolled)")
+                        // Only scroll for new messages after initial load
+                        if !groups.isEmpty && hasInitiallyScrolled {
+                            print("📜 Using smooth scroll for new messages")
+                            // For new messages, use smooth scroll
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                scrollToBottomSmoothly(proxy: proxy)
+                            }
+                        } else if !groups.isEmpty && !hasInitiallyScrolled {
+                            print("📜 Using instant positioning for initial load")
+                            // For initial load, position instantly without animation
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                scrollToBottomInstantly(proxy: proxy)
+                                hasInitiallyScrolled = true
                             }
                         }
                     }
                     .onReceive(viewModel.$shouldScrollToBottom) { shouldScroll in
                         // React to scroll commands from the view model
                         if shouldScroll && !viewModel.messageGroups.isEmpty {
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                                 scrollToBottomSmoothly(proxy: proxy)
                             }
                         }
@@ -166,6 +159,13 @@ struct ChatDetailView: View {
         .navigationBarHidden(true)
         .keyboardSafe() // Use the gentler keyboard handling
         .environmentObject(keyboardManager)
+        .onAppear {
+            // Reset scroll state when view appears
+            hasInitiallyScrolled = false
+            
+            // Don't automatically scroll here - let the messageGroups receiver handle it
+            // This prevents double-scrolling when switching chats
+        }
         #if DEBUG
         .alert("Debug Options", isPresented: $showDebugAlert) {
             Button("Debug Connection") {
@@ -197,51 +197,30 @@ struct ChatDetailView: View {
             return
         }
         
-        print("📜 Scrolling to bottom instantly for chat: \(selectedChatName)")
+        print("📜 Positioning at bottom instantly for chat: \(selectedChatName)")
+        print("📜 Message groups count: \(viewModel.messageGroups.count)")
         
-        // Multiple attempts with different scroll targets for maximum reliability
-        if let lastGroup = viewModel.messageGroups.last,
-           let lastMessage = lastGroup.messages.last {
-            
-            // Immediate scroll to last message
-            proxy.scrollTo(lastMessage.id, anchor: .bottom)
-            
-            // Backup scroll attempts with delays
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                proxy.scrollTo(lastMessage.id, anchor: .bottom)
-            }
-            
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                proxy.scrollTo("bottom", anchor: .bottom)
-            }
-            
-            // Final attempt after UI settles
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                proxy.scrollTo(lastMessage.id, anchor: .bottom)
-            }
-        } else {
+        // Use a transaction with disabled animations to prevent any visible scrolling
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        
+        withTransaction(transaction) {
             proxy.scrollTo("bottom", anchor: .bottom)
         }
-        
-        hasInitiallyScrolled = true
     }
     
-    // Smooth animated scroll (for new messages and keyboard events)
+    // Smooth scroll to bottom (for new messages and keyboard events)
     private func scrollToBottomSmoothly(proxy: ScrollViewProxy) {
         guard !viewModel.messageGroups.isEmpty else {
             print("📜 No messages to scroll to")
             return
         }
         
-        print("📜 Scrolling to bottom smoothly for new messages")
+        print("📜 Scrolling to bottom smoothly")
         
-        withAnimation(.easeOut(duration: 0.3)) {
-            if let lastGroup = viewModel.messageGroups.last,
-               let lastMessage = lastGroup.messages.last {
-                proxy.scrollTo(lastMessage.id, anchor: .bottom)
-            } else {
-                proxy.scrollTo("bottom", anchor: .bottom)
-            }
+        // Smooth animated scroll to bottom
+        withAnimation(.easeInOut(duration: 0.3)) {
+            proxy.scrollTo("bottom", anchor: .bottom)
         }
     }
     
@@ -361,7 +340,7 @@ struct MessageBubbleView: View {
                     .padding(.horizontal, Spacing.md)
                     .padding(.vertical, Spacing.sm)
                     .background(
-                        message.isFromCurrentUser ? Color.accent : Color.backgroundSecondary
+                        message.isFromCurrentUser ? Color.accent : Color.receivedMessageBubble
                     )
                     .cornerRadius(16)
             }

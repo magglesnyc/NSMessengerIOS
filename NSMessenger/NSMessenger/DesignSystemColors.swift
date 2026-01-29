@@ -43,7 +43,7 @@ extension Color {
 
     // MARK: - Message Bubbles
     static let sentMessageBubble = Color(hex: "6E3DB8") // Sent messages
-    static let receivedMessageBubble = Color(hex: "EFF2F5") // Received messages
+    static let receivedMessageBubble = Color(hex: "D6D6DB") // Received messages (darker grey)
 }
 
 // MARK: - Hex Color Extension
